@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: lint / typecheck / build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          # Build needs SITE imports to resolve. No real secrets needed — the
+          # site config is plain TypeScript with placeholder values.
+          NODE_ENV: production
+
+  knip:
+    name: knip (dead-code scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run knip
+
+  audit:
+    name: npm audit (high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm audit --audit-level=high
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  template-gates:
+    name: template-repo gates (marker-guarded)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect template marker
+        id: marker
+        run: |
+          if [ -f .template-marker ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Template marker present — running template-repo gates."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No template marker — skipping template-repo gates (this is a downstream store)."
+          fi
+
+      - name: Brand-leak grep
+        if: steps.marker.outputs.present == 'true'
+        run: |
+          # Fails if the case-insensitive string "galanta" appears in tracked
+          # files OUTSIDE of: src/config/ (real brand strings live there),
+          # LICENSE/README/SECURITY (credit may be intentional), and this CI
+          # workflow itself (the grep references the word).
+          MATCHES=$(git ls-files | \
+            grep -vE '^src/config/' | \
+            grep -vE '^(LICENSE|README\.md|SECURITY\.md|\.github/workflows/ci\.yml)$' | \
+            xargs grep -liI 'galanta' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "❌ Brand-leak gate failed. The string 'galanta' was found in these files:"
+            echo "$MATCHES"
+            echo ""
+            echo "Move any real brand strings to src/config/site.ts."
+            exit 1
+          fi
+          echo "✓ Brand-leak gate passed."
+
+      - name: File-count gate (sprawl check)
+        if: steps.marker.outputs.present == 'true'
+        run: |
+          # The template ships with this exact set of files under src/ and
+          # scripts/. Adding to this list requires updating the manifest below.
+          # Net-new application files = 3 (src/config/site.ts,
+          # src/lib/validation.ts, src/lib/ratelimit.ts); src/config/sessions.ts
+          # is a move from src/lib/sessions.ts.
+          EXPECTED=$(cat <<'EOF'
+          scripts/create-promo-code-live.ts
+          scripts/create-promo-code.ts
+          scripts/setup-calcom.ts
+          scripts/setup-stripe-live.ts
+          scripts/setup-stripe-webhook-live.ts
+          scripts/setup-stripe-webhook.ts
+          scripts/setup-stripe.ts
+          src/app/api/checkout/route.ts
+          src/app/api/contact/route.ts
+          src/app/api/stripe/webhook/route.ts
+          src/app/coaching/layout.tsx
+          src/app/coaching/page.tsx
+          src/app/coaching/schedule/page.tsx
+          src/app/contact/layout.tsx
+          src/app/contact/page.tsx
+          src/app/globals.css
+          src/app/layout.tsx
+          src/app/page.tsx
+          src/app/privacy/page.tsx
+          src/app/security/page.tsx
+          src/components/AccentLine.tsx
+          src/components/Button.tsx
+          src/components/Container.tsx
+          src/components/FadeIn.tsx
+          src/components/Footer.tsx
+          src/components/Navbar.tsx
+          src/components/Section.tsx
+          src/components/coaching/BookButton.tsx
+          src/components/coaching/CoachingBooking.tsx
+          src/components/coaching/CoachingCTA.tsx
+          src/components/coaching/CoachingFAQ.tsx
+          src/components/coaching/CoachingHero.tsx
+          src/config/sessions.ts
+          src/config/site.ts
+          src/lib/calcom.ts
+          src/lib/ratelimit.ts
+          src/lib/scrollToId.ts
+          src/lib/stripe.ts
+          src/lib/validation.ts
+          EOF
+          )
+          ACTUAL=$(git ls-files src/ scripts/ | sort)
+          # The heredoc preserves YAML indentation; strip leading whitespace before diffing.
+          DIFF=$(diff <(echo "$EXPECTED" | sed 's/^[[:space:]]*//' | sort) <(echo "$ACTUAL") || true)
+          if [ -n "$DIFF" ]; then
+            echo "❌ File-count gate failed. Actual files under src/+scripts/ differ from the manifest:"
+            echo ""
+            echo "$DIFF"
+            echo ""
+            echo "If this addition is intentional, update the EXPECTED block in"
+            echo "  .github/workflows/ci.yml"
+            echo "and ensure the addition is intentional."
+            exit 1
+          fi
+          echo "✓ File-count gate passed ($(echo "$ACTUAL" | wc -l | xargs) files)."

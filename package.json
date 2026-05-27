@@ -1,0 +1,63 @@
+{
+  "name": "coaching-store",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "knip": "knip",
+    "setup:stripe": "tsx scripts/setup-stripe.ts",
+    "setup:stripe:live": "tsx scripts/setup-stripe-live.ts",
+    "setup:stripe:webhook": "tsx scripts/setup-stripe-webhook.ts",
+    "setup:stripe:webhook:live": "tsx scripts/setup-stripe-webhook-live.ts",
+    "setup:calcom": "tsx scripts/setup-calcom.ts",
+    "promo": "tsx scripts/create-promo-code.ts",
+    "promo:live": "tsx scripts/create-promo-code-live.ts"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "framer-motion": "^12.34.0",
+    "next": "16.2.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "resend": "^6.9.2",
+    "sharp": "^0.34.5",
+    "stripe": "^22.1.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "knip": "^5.30.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.3",
+    "typescript": "^5"
+  },
+  "knip": {
+    "entry": [
+      "src/app/**/{page,layout,route,loading,error,not-found,opengraph-image}.{ts,tsx}",
+      "scripts/*.ts"
+    ],
+    "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
+    "ignoreDependencies": [
+      "sharp",
+      "tailwindcss",
+      "postcss"
+    ],
+    "ignoreExportsUsedInFile": true,
+    "ignore": [
+      "next-env.d.ts",
+      "src/config/sessions.ts",
+      "src/config/site.ts",
+      "src/lib/validation.ts"
+    ]
+  }
+}

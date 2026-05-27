@@ -1,0 +1,9 @@
+This file marks the repo as the unconfigured template. CI uses its presence to
+run the brand-leak grep (which would false-positive on a real configured store).
+
+The very first action of `/setup` is to delete this file. Once it's gone, the
+brand-leak gate stops running and you can put your own brand name wherever you
+like.
+
+If you're seeing this file in a cloned store, your `/setup` flow was interrupted
+before step 1 finished. Re-run `/setup` to clean up.
