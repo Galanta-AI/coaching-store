@@ -6,9 +6,9 @@
  * `checkout.session.completed`.
  *
  * Stripe returns the signing secret ONLY on the create response — there is no
- * way to retrieve it later. This script prints the secret + the exact `vercel
- * env add` command to inject it into production. Capture it from the output;
- * rerunning will not re-yield it.
+ * way to retrieve it later. This script prints the secret + the exact
+ * `firebase apphosting:secrets:set` command to inject it into production.
+ * Capture it from the output; rerunning will not re-yield it.
  *
  * --- USAGE ------------------------------------------------------------------
  *
@@ -65,7 +65,6 @@ if (mode === "UNKNOWN") {
   process.exit(1);
 }
 
-const vercelEnvTarget = mode === "LIVE" ? "production" : "preview";
 const updateEvents = process.argv.includes("--update-events");
 const stripe = new Stripe(secretKey);
 
@@ -141,11 +140,14 @@ async function main(): Promise<void> {
   console.log(`    Signing secret: ${created.secret}`);
   console.log(
     `\nNext steps:\n\n` +
-      `  1) Add the signing secret to Vercel (you will be prompted to paste; ` +
-      `the value never leaves your terminal):\n` +
-      `       vercel env add STRIPE_WEBHOOK_SECRET ${vercelEnvTarget}\n\n` +
-      `  2) Trigger a redeploy so the new env var takes effect:\n` +
-      `       vercel deploy${mode === "LIVE" ? " --prod" : ""}\n`
+      `  1) Store the signing secret in Google Cloud Secret Manager (you will be\n` +
+      `     prompted to paste; the value never leaves your terminal):\n` +
+      `       firebase apphosting:secrets:set STRIPE_WEBHOOK_SECRET\n\n` +
+      `  2) Make sure apphosting.yaml has an env: entry referencing it:\n` +
+      `       - variable: STRIPE_WEBHOOK_SECRET\n` +
+      `         secret: STRIPE_WEBHOOK_SECRET\n\n` +
+      `  3) Commit apphosting.yaml and push to redeploy${mode === "LIVE" ? " (live)" : ""}:\n` +
+      `       git push origin main\n`
   );
 }
 

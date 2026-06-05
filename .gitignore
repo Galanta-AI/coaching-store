@@ -23,15 +23,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — never commit. Always pass values directly to Vercel via `vercel env add`,
-# or paste into .env.local locally (this file enforces that they never enter git).
+# env files — never commit. Always pass values directly to Secret Manager via
+# `firebase apphosting:secrets:set`, or paste into .env.local locally (this file
+# enforces that they never enter git).
 .env
 .env.local
 .env.live
 .env*.local
 
-# vercel
-.vercel
+# firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
 
 # typescript
 *.tsbuildinfo

@@ -20,8 +20,9 @@ their personal cards. This template's security posture matches that profile.
   exact env line for the developer to paste into `.env.local` themselves;
   Claude verifies presence and prefix shape with a small `node -e` script
   without ever seeing the value. Production secrets go through
-  `vercel env add` in the developer's own terminal — encrypted in Vercel,
-  never in chat or in the repo.
+  `firebase apphosting:secrets:set` in the developer's own terminal —
+  stored encrypted in Google Cloud Secret Manager, referenced from
+  `apphosting.yaml`, never in chat or in the repo.
 - **`.env.live` isolation.** Live Stripe keys live in `.env.live` (gitignored,
   separate from `.env.local`). Setup scripts that mutate live data refuse to
   run if the loaded key isn't `(sk|rk)_live_`, and pause 5 seconds before any
@@ -45,7 +46,7 @@ their personal cards. This template's security posture matches that profile.
   best-effort: it doesn't survive cold starts and doesn't coordinate across
   concurrently-scaled function instances. It reduces noise from misbehaving
   clients but **is not a hard security control**, and we do not market it as
-  one. Upgrade path: swap the `Map` for Upstash Redis or Vercel KV via
+  one. Upgrade path: swap the `Map` for Upstash Redis or Firestore via
   `@upstash/ratelimit` — the call site (`limiter.hit(key)`) stays the same.
 
 ## What this template explicitly does NOT do
@@ -66,13 +67,15 @@ disclosure. Coordinated disclosure is appreciated.
 
 ## Operational runbook
 
-- **Suspected fraudulent activity**: set `STRIPE_DISABLED=true` in Vercel
-  environment, redeploy. Checkout and webhook return 503; Stripe holds events.
-  Investigate, then unset and redeploy.
+- **Suspected fraudulent activity**: set `STRIPE_DISABLED=true` via
+  `firebase apphosting:secrets:set STRIPE_DISABLED`, push to redeploy.
+  Checkout and webhook return 503; Stripe holds events. Investigate, then
+  unset and redeploy.
 - **Signing secret rotation**: delete the webhook endpoint in the Stripe
   dashboard, re-run `npm run setup:stripe:webhook` (or `:live`), capture the
-  new secret printed by the script, run `vercel env add STRIPE_WEBHOOK_SECRET
-  production` (replace), redeploy.
+  new secret printed by the script, run
+  `firebase apphosting:secrets:set STRIPE_WEBHOOK_SECRET` to update the
+  Secret Manager value, push to redeploy.
 - **Stripe key rotation**: rotate in the Stripe dashboard, run
-  `vercel env add STRIPE_SECRET_KEY production` (replace), redeploy. Local dev:
-  update `.env.local`.
+  `firebase apphosting:secrets:set STRIPE_SECRET_KEY` to update the Secret
+  Manager value, push to redeploy. Local dev: update `.env.local`.

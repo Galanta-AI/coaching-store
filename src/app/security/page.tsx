@@ -45,8 +45,10 @@ export default function SecurityPage() {
                     forged events are rejected with HTTP 400.
                   </li>
                   <li>
-                    <strong>Secrets isolation.</strong> Production secrets live in Vercel
-                    encrypted environment variables. Local development uses{" "}
+                    <strong>Secrets isolation.</strong> Production secrets live in Google
+                    Cloud Secret Manager, referenced from{" "}
+                    <code className="text-accent-500">apphosting.yaml</code> on Firebase
+                    App Hosting. Local development uses{" "}
                     <code className="text-accent-500">.env.local</code> (gitignored). Live
                     Stripe keys are pinned to a separate{" "}
                     <code className="text-accent-500">.env.live</code> file and never
@@ -85,7 +87,7 @@ export default function SecurityPage() {
                   this is best-effort: it reduces noise from misbehaving clients but does
                   not survive cold starts or coordinate across function instances. We do
                   not market this as a security control. The upgrade path to a distributed
-                  limiter (Upstash Redis or Vercel KV) is one drop-in change to{" "}
+                  limiter (Upstash Redis or Firestore) is one drop-in change to{" "}
                   <code className="text-accent-500">src/lib/ratelimit.ts</code>.
                 </p>
 

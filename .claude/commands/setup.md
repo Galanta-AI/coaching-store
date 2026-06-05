@@ -12,9 +12,11 @@ For every secret value (Stripe key, Cal.com key, Resend key, webhook secret):
    themselves, in their editor — **not in the chat**.
 2. Verify presence and shape via a `node -e` one-liner; the script only sees
    "exit 0 = ok" or "exit 1 = missing/wrong-prefix."
-3. For Vercel production secrets, instruct the developer to run
-   `vercel env add KEY production` in their own terminal. Confirm with
-   `vercel env ls`.
+3. For Firebase App Hosting production secrets, instruct the developer to
+   run `firebase apphosting:secrets:set KEY` in their own terminal — the
+   CLI prompts for the value interactively; it never enters the chat. The
+   secret is stored in Google Cloud Secret Manager. Reference it from
+   `apphosting.yaml` (see Step 9).
 
 You should never see or echo a secret value. If the developer pastes one,
 politely refuse, restate the design choice, and move on.
@@ -209,51 +211,109 @@ If any step fails, surface the error and help debug.
 
 ---
 
-## Step 9 — Deploy to Vercel
+## Step 9 — Deploy to Firebase App Hosting
+
+App Hosting natively serves Next.js apps with `output: "standalone"` (already
+set in `next.config.ts`). Secrets live in Google Cloud Secret Manager and are
+referenced from `apphosting.yaml`.
+
+### 9a — Install and authenticate
 
 Have the developer run, in their own terminal:
 
 ```bash
-vercel link
+npm install -g firebase-tools
+firebase login
 ```
 
-Then, for **each** secret, the developer runs:
+`firebase login` opens a browser; wait for the developer to return.
+
+### 9b — Firebase project + Blaze plan
+
+Direct the developer to https://console.firebase.google.com/ to create a project
+(or pick an existing one). **App Hosting requires the Blaze pay-as-you-go plan.**
+The free Spark plan will not work. Link them to
+https://firebase.google.com/pricing and have them upgrade the project to Blaze
+before continuing — this requires a credit card and is gated by Google's billing
+flow, not something you can automate.
+
+Once Blaze is on, the developer runs:
 
 ```bash
-vercel env add STRIPE_SECRET_KEY production
-vercel env add CALCOM_API_KEY production
-vercel env add CALCOM_USERNAME production
-vercel env add RESEND_API_KEY production
-vercel env add EMAIL_FROM production
+firebase use --add
 ```
 
-The value is typed once into Vercel's interactive prompt; it never enters chat
-or the repo. You verify presence with:
+…and selects the project.
+
+### 9c — Initialize App Hosting
 
 ```bash
-vercel env ls
+firebase init apphosting
 ```
 
-Then deploy:
+Walk through the prompts. This connects the GitHub repo and generates
+`apphosting.yaml` at the repo root. App Hosting will auto-deploy on every push
+to the connected branch.
+
+### 9d — Set production secrets
+
+For each secret, the developer runs:
 
 ```bash
-vercel deploy --prod
+firebase apphosting:secrets:set STRIPE_SECRET_KEY
+firebase apphosting:secrets:set CALCOM_API_KEY
+firebase apphosting:secrets:set CALCOM_USERNAME
+firebase apphosting:secrets:set RESEND_API_KEY
+firebase apphosting:secrets:set EMAIL_FROM
 ```
 
-**Production webhook**: once the site has a public URL, register the webhook:
+The CLI prompts for the value interactively; it never enters chat or the repo.
+Each secret is stored in Google Cloud Secret Manager.
+
+Then reference them from `apphosting.yaml`:
+
+```yaml
+env:
+  - variable: STRIPE_SECRET_KEY
+    secret: STRIPE_SECRET_KEY
+  - variable: CALCOM_API_KEY
+    secret: CALCOM_API_KEY
+  - variable: CALCOM_USERNAME
+    secret: CALCOM_USERNAME
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+  - variable: EMAIL_FROM
+    secret: EMAIL_FROM
+```
+
+Commit `apphosting.yaml` (it contains references, not values).
+
+### 9e — Deploy
 
 ```bash
-STRIPE_WEBHOOK_URL=https://your-domain.com/api/stripe/webhook \
+git push origin main
+```
+
+App Hosting builds and deploys. The first build typically takes 3–5 minutes.
+The backend URL is shown in the Firebase console under App Hosting → Backends.
+
+### 9f — Production webhook
+
+Once the App Hosting backend has a public URL:
+
+```bash
+STRIPE_WEBHOOK_URL=https://<your-backend>.web.app/api/stripe/webhook \
   npm run setup:stripe:webhook
 ```
 
-This prints the signing secret. Have the developer immediately add it:
+The script prints the signing secret. Add it:
 
 ```bash
-vercel env add STRIPE_WEBHOOK_SECRET production
+firebase apphosting:secrets:set STRIPE_WEBHOOK_SECRET
 ```
 
-Then redeploy: `vercel deploy --prod`.
+Add the matching `env:` entry to `apphosting.yaml`, then push to trigger
+redeploy.
 
 ---
 
@@ -264,8 +324,8 @@ When the developer is ready to switch from test to live Stripe:
 1. Create `.env.live` (gitignored) with `STRIPE_SECRET_KEY=sk_live_...` (or `rk_live_...`).
 2. Run `npm run setup:stripe:live` — provisions live Stripe products.
 3. Run `npm run setup:stripe:webhook:live` — registers the live webhook endpoint, prints the live signing secret.
-4. Developer runs `vercel env add STRIPE_SECRET_KEY production` (replace test with live) and `vercel env add STRIPE_WEBHOOK_SECRET production` (with the live signing secret).
-5. Redeploy.
+4. Developer runs `firebase apphosting:secrets:set STRIPE_SECRET_KEY` (the prompt updates the existing secret value) and `firebase apphosting:secrets:set STRIPE_WEBHOOK_SECRET` (with the live signing secret).
+5. Push to main to redeploy.
 
 DNS for the custom domain and Resend domain verification can take hours; not on
 the test-mode critical path.
@@ -279,5 +339,15 @@ the test-mode critical path.
 - **Checkout returns 503**: `STRIPE_DISABLED=true` is set, or the Stripe key is missing.
 - **Cal.com link is the static URL fallback**: `CALCOM_API_KEY` is wrong, or the event type wasn't created. Re-run `npm run setup:calcom`.
 - **Promo code says "no products found"**: `npm run setup:stripe` hasn't been run yet.
+
+### If the App Hosting deploy fails
+
+*This section will be expanded after the first real end-to-end deploy. Likely entries to be populated from that dry-run:*
+
+- **"Billing account not configured" / build refuses to start**: the project hasn't been upgraded to Blaze. Send the developer to https://firebase.google.com/pricing to upgrade.
+- **Build fails with "secret not found"**: a name in `apphosting.yaml`'s `env:` block doesn't match a secret in Secret Manager. List existing secrets with `firebase apphosting:secrets:list` and either rename the entry or set the missing secret.
+- **GitHub repo not connected**: `firebase init apphosting` was skipped or its GitHub authorization step was dismissed. Re-run it.
+- **Backend URL returns 404 after first deploy**: confirm the build actually succeeded (Firebase console → App Hosting → Backends → Rollouts). The first rollout takes 3–5 minutes and 404s before it finishes.
+- **Webhook returns 400 after deploy**: `STRIPE_WEBHOOK_SECRET` set but `apphosting.yaml` is missing the `env:` entry referencing it. Add the entry, commit, push.
 
 When stuck, suggest reading the relevant script — they're commented heavily.

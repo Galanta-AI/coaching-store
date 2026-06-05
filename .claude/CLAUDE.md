@@ -5,7 +5,7 @@ A Next.js + Stripe + Cal.com template for coaching stores. The developer runs
 
 ## Architectural facts
 
-- **Hosting**: Vercel only. No Cloud Run, no Docker, no Kubernetes.
+- **Hosting**: Firebase App Hosting only. No raw Cloud Run, no Docker, no Kubernetes. Production secrets live in Google Cloud Secret Manager, referenced from `apphosting.yaml`.
 - **Stripe**: hosted Checkout for one-time payments. No card data ever touches the site.
 - **Scheduling**: Cal.com. One Cal.com event type per session, fixed duration.
 - **Email**: Resend for the post-checkout confirmation and the contact form.
@@ -40,9 +40,12 @@ node -e "require('dotenv').config({path:'.env.local'}); process.exit(/^(sk|rk)_t
 
 Exit 0 means "test-mode key present"; exit 1 means "missing or wrong prefix."
 
-For production secrets, instruct the developer to run `vercel env add` in their
-own terminal — the value never enters chat or repo. You only verify with
-`vercel env ls`.
+For production secrets, instruct the developer to run
+`firebase apphosting:secrets:set <NAME>` in their own terminal — the CLI prompts
+for the value interactively, so it never enters chat or repo. The secret is
+stored in Google Cloud Secret Manager; reference it from `apphosting.yaml`
+under `env:` to make it visible to the running app. Verify with
+`firebase apphosting:secrets:list`.
 
 ## File-count gate (template repo only)
 
